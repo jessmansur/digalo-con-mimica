@@ -91,7 +91,7 @@
           <span class="text-lg font-bold text-pink-600" id="turn-label">Turno del Equipo 1</span>
         </div>
 
-        <!-- RULETA DE EMOJIS (SIN NOMBRES DE PELÍCULAS) -->
+        <!-- RULETA -->
         <div class="relative flex justify-center items-center py-4">
           <div class="relative w-72 h-72 md:w-80 md:h-80">
             <!-- Indicador superior -->
@@ -140,13 +140,16 @@
             <thead>
               <tr id="table-header" class="bg-purple-100 text-purple-800">
                 <th class="p-3 border border-purple-200">Ronda</th>
+                <!-- Equipos dinámicos -->
               </tr>
             </thead>
             <tbody id="table-body">
+              <!-- Filas dinámicas -->
             </tbody>
             <tfoot>
               <tr id="table-footer" class="bg-pink-100 font-bold text-pink-800">
                 <td class="p-3 border border-pink-200">TOTAL</td>
+                <!-- Totales dinámicos -->
               </tr>
             </tfoot>
           </table>
@@ -157,6 +160,7 @@
   </main>
 
   <script>
+    // ESTADO DEL JUEGO
     let rawMovies = [];
     let moviePool = [];
     let numTeams = 2;
@@ -170,9 +174,12 @@
     let isSpinning = false;
     let currentMovie = "";
 
-    const wheelColors = ['#f472b6', '#d8b4fe', '#fbcfe8', '#e9d5ff', '#c084fc', '#fce7f3'];
-    const decorativeSlices = ['🎬', '🍿', '⭐', '🎭', '🎟️', '✨', '🎥', '🏆', '🎉', '💖', '🎁', '🎪'];
+    // Colores para la ruleta
+    const wheelColors = ['#f472b6', '#c084fc', '#fbcfe8', '#e9d5ff', '#a855f7', '#ec4899'];
+    // Emojis para que la ruleta se vea divertida sin mostrar los nombres de las películas
+    const wheelEmojis = ['🎬', '🍿', '⭐', '🎭', '🎟️', '✨', '🎥', '🏆', '🎉', '💖', '🎁', '🎪'];
 
+    // NAVEGACIÓN
     function navigate(section) {
       ['config', 'game', 'scores'].forEach(sec => {
         document.getElementById(`sec-${sec}`).classList.add('hidden');
@@ -188,292 +195,8 @@
       if (section === 'scores') updateScoreTable();
     }
 
+    // MANEJO DE ARCHIVOS EXCEL / CSV (Identico al primer codigo funcional)
     function handleFile(file) {
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-          
-          rawMovies = jsonData.flat()
-            .map(item => item ? item.toString().trim() : '')
-            .filter(item => item.length > 0);
-
-          if (rawMovies.length < 2) {
-            alert("El archivo debe contener al menos 2 películas.");
-            return;
-          }
-
-          document.getElementById('file-status').classList.remove('hidden');
-          document.getElementById('status-desc').innerText = `Se cargaron ${rawMovies.length} películas del archivo "${file.name}".`;
-
-          calculateOptions(rawMovies.length);
-        } catch (err) {
-          console.error(err);
-          alert("Hubo un error al leer el archivo. Asegurate de que sea un Excel o CSV válido.");
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-    function calculateOptions(total) {
-      const container = document.getElementById('options-container');
-      container.innerHTML = '';
-
-      for (let teams = 2; teams <= 4; teams++) {
-        const rounds = Math.floor(total / teams);
-        const leftover = total % teams;
-
-        if (rounds < 1) continue;
-
-        const card = document.createElement('div');
-        card.className = "p-4 rounded-xl border-2 border-purple-200 bg-purple-50 text-center hover:border-purple-500 transition space-y-2 flex flex-col justify-between";
-        card.innerHTML = `
-          <div>
-            <h3 class="font-bold text-lg text-purple-800">${teams} Equipos</h3>
-            <p class="text-sm text-gray-600">${rounds} rondas por equipo</p>
-            ${leftover > 0 ? `<p class="text-xs text-pink-500 mt-1">Sobran ${leftover} película(s) aleatoria(s)</p>` : `<p class="text-xs text-green-600 mt-1">¡Encaje perfecto!</p>`}
-          </div>
-          <button onclick="setupGame(${teams}, ${rounds})" class="w-full mt-3 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow">
-            Elegir esta opción
-          </button>
-        `;
-        container.appendChild(card);
-      }
-
-      document.getElementById('setup-options').classList.remove('hidden');
-    }
-
-    function setupGame(teams, rounds) {
-      numTeams = teams;
-      maxRounds = rounds;
-      moviePool = [...rawMovies].sort(() => Math.random() - 0.5);
-      
-      scores = {};
-      for (let t = 1; t <= numTeams; t++) {
-        scores[t] = Array(maxRounds).fill(0);
-      }
-
-      currentRound = 1;
-      currentTeamTurn = 1;
-
-      updateTurnLabel();
-      setupPointButtons();
-      drawWheel();
-
-      alert(`¡Juego configurado para ${numTeams} equipos y ${maxRounds} rondas!`);
-      navigate('game');
-    }
-
-    function drawWheel(angle = 0) {
-      const canvas = document.getElementById('wheelCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const cx = canvas.width / 2;
-      const cy = canvas.height / 2;
-      const radius = canvas.width / 2 - 10;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      const slices = decorativeSlices.length;
-      const sliceAngle = (2 * Math.PI) / slices;
-
-      for (let i = 0; i < slices; i++) {
-        const start = angle + i * sliceAngle;
-        const end = start + sliceAngle;
-
-        ctx.beginPath();
-        ctx.moveTo(cx, cy);
-        ctx.arc(cx, cy, radius, start, end);
-        ctx.fillStyle = wheelColors[i % wheelColors.length];
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(start + sliceAngle / 2);
-        ctx.textAlign = "right";
-        ctx.font = "22px sans-serif";
-        ctx.fillText(decorativeSlices[i], radius - 20, 8);
-        ctx.restore();
-      }
-    }
-
-    function spinWheel() {
-      if (isSpinning) return;
-      if (moviePool.length === 0) {
-        alert("¡Se acabaron las películas del pool!");
-        return;
-      }
-
-      isSpinning = true;
-      document.getElementById('spin-btn').disabled = true;
-      document.getElementById('selected-movie-text').innerText = "Girando rueda sorpresa...";
-
-      let duration = 3000;
-      let start = null;
-      let totalRotation = Math.PI * 2 * (5 + Math.random() * 5);
-
-      function animate(timestamp) {
-        if (!start) start = timestamp;
-        let progress = (timestamp - start) / duration;
-
-        if (progress < 1) {
-          let easeOut = 1 - Math.pow(1 - progress, 3);
-          let currentAngle = easeOut * totalRotation;
-          drawWheel(currentAngle);
-          requestAnimationFrame(animate);
-        } else {
-          isSpinning = false;
-          const selectedIndex = Math.floor(Math.random() * moviePool.length);
-          currentMovie = moviePool.splice(selectedIndex, 1)[0];
-
-          document.getElementById('selected-movie-text').innerText = `🎬 Película: "${currentMovie}"`;
-          drawWheel();
-          startTimer();
-        }
-      }
-
-      requestAnimationFrame(animate);
-    }
-
-    function startTimer() {
-      clearInterval(timerInterval);
-      timeLeft = 45;
-      document.getElementById('timer-display').innerText = timeLeft;
-      document.getElementById('stop-timer-btn').disabled = false;
-      document.getElementById('score-buttons').classList.add('hidden');
-
-      timerInterval = setInterval(() => {
-        timeLeft--;
-        document.getElementById('timer-display').innerText = timeLeft;
-        if (timeLeft <= 0) {
-          stopTimer();
-        }
-      }, 1000);
-    }
-
-    function stopTimer() {
-      clearInterval(timerInterval);
-      document.getElementById('stop-timer-btn').disabled = true;
-      document.getElementById('score-buttons').classList.remove('hidden');
-    }
-
-    function awardPoint(teamNumber) {
-      if (teamNumber !== null) {
-        scores[teamNumber][currentRound - 1] += 1;
-        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
-      }
-
-      currentTeamTurn++;
-      if (currentTeamTurn > numTeams) {
-        currentTeamTurn = 1;
-        currentRound++;
-      }
-
-      if (currentRound > maxRounds) {
-        alert("🎉 ¡El juego ha terminado! Vamos a ver los puntajes.");
-        navigate('scores');
-        return;
-      }
-
-      updateTurnLabel();
-      document.getElementById('score-buttons').classList.add('hidden');
-      document.getElementById('selected-movie-text').innerText = "¡Girás la rueda para la siguiente película!";
-      document.getElementById('spin-btn').disabled = false;
-    }
-
-    function updateTurnLabel() {
-      document.getElementById('current-round-label').innerText = `Ronda ${currentRound} de ${maxRounds}`;
-      document.getElementById('turn-label').innerText = `Turno del Equipo ${currentTeamTurn}`;
-    }
-
-    function setupPointButtons() {
-      const container = document.getElementById('team-point-btns');
-      container.innerHTML = '';
-
-      for (let t = 1; t <= numTeams; t++) {
-        const btn = document.createElement('button');
-        btn.className = "bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-xl shadow transition";
-        btn.innerText = `Punto para Equipo ${t}`;
-        btn.onclick = () => awardPoint(t);
-        container.appendChild(btn);
-      }
-
-      const noPointBtn = document.createElement('button');
-      noPointBtn.className = "bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-xl shadow transition";
-      noPointBtn.innerText = "Nadie sumó punto ❌";
-      noPointBtn.onclick = () => awardPoint(null);
-      container.appendChild(noPointBtn);
-    }
-
-    function updateScoreTable() {
-      const header = document.getElementById('table-header');
-      const body = document.getElementById('table-body');
-      const footer = document.getElementById('table-footer');
-
-      header.innerHTML = '<th class="p-3 border border-purple-200">Ronda</th>';
-      body.innerHTML = '';
-      footer.innerHTML = '<td class="p-3 border border-pink-200">TOTAL</td>';
-
-      for (let t = 1; t <= numTeams; t++) {
-        const th = document.createElement('th');
-        th.className = "p-3 border border-purple-200";
-        th.innerText = `Equipo ${t}`;
-        header.appendChild(th);
-      }
-
-      for (let r = 0; r < maxRounds; r++) {
-        const tr = document.createElement('tr');
-        if (r === currentRound - 1) tr.className = "bg-purple-50 font-bold";
-
-        const tdRound = document.createElement('td');
-        tdRound.className = "p-2 border border-purple-100 font-semibold";
-        tdRound.innerText = `Ronda ${r + 1}`;
-        tr.appendChild(tdRound);
-
-        for (let t = 1; t <= numTeams; t++) {
-          const td = document.createElement('td');
-          td.className = "p-2 border border-purple-100";
-          td.innerText = scores[t] ? (scores[t][r] || 0) : 0;
-          tr.appendChild(td);
-        }
-        body.appendChild(tr);
-      }
-
-      for (let t = 1; t <= numTeams; t++) {
-        const tdTotal = document.createElement('td');
-        tdTotal.className = "p-3 border border-pink-200 text-xl font-black";
-        tdTotal.innerText = scores[t] ? scores[t].reduce((a, b) => a + b, 0) : 0;
-        footer.appendChild(tdTotal);
-      }
-    }
-
-    function resetGame() {
-      if (confirm("¿Estás seguro de reiniciar el juego? Se borrarán los puntajes acumulados.")) {
-        clearInterval(timerInterval);
-        moviePool = [...rawMovies].sort(() => Math.random() - 0.5);
-        currentRound = 1;
-        currentTeamTurn = 1;
-        
-        for (let t = 1; t <= numTeams; t++) {
-          scores[t] = Array(maxRounds).fill(0);
-        }
-
-        document.getElementById('selected-movie-text').innerText = "¡Girás la rueda para descubrir la película!";
-        document.getElementById('timer-display').innerText = "45";
-        document.getElementById('spin-btn').disabled = false;
-        document.getElementById('score-buttons').classList.add('hidden');
-
-        updateTurnLabel();
-        drawWheel();
-        alert("El juego ha sido reiniciado.");
-        navigate('config');
-      }
-    }
-  </script>
-</body>
-</html>
+      reader.onload = function(e)
