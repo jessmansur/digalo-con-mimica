@@ -91,7 +91,7 @@
           <span class="text-lg font-bold text-pink-600" id="turn-label">Turno del Equipo 1</span>
         </div>
 
-        <!-- RULETA DE EMOJIS (SIN NOMBRES) -->
+        <!-- RULETA DE EMOJIS (SIN NOMBRES DE PELÍCULAS) -->
         <div class="relative flex justify-center items-center py-4">
           <div class="relative w-72 h-72 md:w-80 md:h-80">
             <!-- Indicador superior -->
@@ -170,9 +170,7 @@
     let isSpinning = false;
     let currentMovie = "";
 
-    // Gama de colores lila, blanco y rosa
     const wheelColors = ['#f472b6', '#d8b4fe', '#fbcfe8', '#e9d5ff', '#c084fc', '#fce7f3'];
-    // Emojis fijos decorativos para la ruleta
     const decorativeSlices = ['🎬', '🍿', '⭐', '🎭', '🎟️', '✨', '🎥', '🏆', '🎉', '💖', '🎁', '🎪'];
 
     function navigate(section) {
@@ -194,24 +192,29 @@
       if (!file) return;
       const reader = new FileReader();
       reader.onload = function(e) {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-        
-        rawMovies = jsonData.flat()
-          .map(item => item ? item.toString().trim() : '')
-          .filter(item => item.length > 0);
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+          
+          rawMovies = jsonData.flat()
+            .map(item => item ? item.toString().trim() : '')
+            .filter(item => item.length > 0);
 
-        if (rawMovies.length < 2) {
-          alert("El archivo debe contener al menos 2 películas.");
-          return;
+          if (rawMovies.length < 2) {
+            alert("El archivo debe contener al menos 2 películas.");
+            return;
+          }
+
+          document.getElementById('file-status').classList.remove('hidden');
+          document.getElementById('status-desc').innerText = `Se cargaron ${rawMovies.length} películas del archivo "${file.name}".`;
+
+          calculateOptions(rawMovies.length);
+        } catch (err) {
+          console.error(err);
+          alert("Hubo un error al leer el archivo. Asegurate de que sea un Excel o CSV válido.");
         }
-
-        document.getElementById('file-status').classList.remove('hidden');
-        document.getElementById('status-desc').innerText = `Se cargaron ${rawMovies.length} películas del archivo "${file.name}".`;
-
-        calculateOptions(rawMovies.length);
       };
       reader.readAsArrayBuffer(file);
     }
@@ -265,9 +268,9 @@
       navigate('game');
     }
 
-    // DIBUJAR RULETA SÓLO CON EMOJIS (SIN TÍTULOS DE PELÍCULAS)
     function drawWheel(angle = 0) {
       const canvas = document.getElementById('wheelCanvas');
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
@@ -289,7 +292,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Solamente dibuja un emoji en cada porción
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(start + sliceAngle / 2);
@@ -309,7 +311,7 @@
 
       isSpinning = true;
       document.getElementById('spin-btn').disabled = true;
-      document.getElementById('selected-movie-text').innerText = "Girando ruleta sorpresa...";
+      document.getElementById('selected-movie-text').innerText = "Girando rueda sorpresa...";
 
       let duration = 3000;
       let start = null;
@@ -326,11 +328,9 @@
           requestAnimationFrame(animate);
         } else {
           isSpinning = false;
-          // Extraer la película aleatoria del pool
           const selectedIndex = Math.floor(Math.random() * moviePool.length);
           currentMovie = moviePool.splice(selectedIndex, 1)[0];
 
-          // Revelar la película ÚNICAMENTE en el recuadro de abajo
           document.getElementById('selected-movie-text').innerText = `🎬 Película: "${currentMovie}"`;
           drawWheel();
           startTimer();
@@ -380,4 +380,100 @@
         return;
       }
 
-      updateTurn
+      updateTurnLabel();
+      document.getElementById('score-buttons').classList.add('hidden');
+      document.getElementById('selected-movie-text').innerText = "¡Girás la rueda para la siguiente película!";
+      document.getElementById('spin-btn').disabled = false;
+    }
+
+    function updateTurnLabel() {
+      document.getElementById('current-round-label').innerText = `Ronda ${currentRound} de ${maxRounds}`;
+      document.getElementById('turn-label').innerText = `Turno del Equipo ${currentTeamTurn}`;
+    }
+
+    function setupPointButtons() {
+      const container = document.getElementById('team-point-btns');
+      container.innerHTML = '';
+
+      for (let t = 1; t <= numTeams; t++) {
+        const btn = document.createElement('button');
+        btn.className = "bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-xl shadow transition";
+        btn.innerText = `Punto para Equipo ${t}`;
+        btn.onclick = () => awardPoint(t);
+        container.appendChild(btn);
+      }
+
+      const noPointBtn = document.createElement('button');
+      noPointBtn.className = "bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-xl shadow transition";
+      noPointBtn.innerText = "Nadie sumó punto ❌";
+      noPointBtn.onclick = () => awardPoint(null);
+      container.appendChild(noPointBtn);
+    }
+
+    function updateScoreTable() {
+      const header = document.getElementById('table-header');
+      const body = document.getElementById('table-body');
+      const footer = document.getElementById('table-footer');
+
+      header.innerHTML = '<th class="p-3 border border-purple-200">Ronda</th>';
+      body.innerHTML = '';
+      footer.innerHTML = '<td class="p-3 border border-pink-200">TOTAL</td>';
+
+      for (let t = 1; t <= numTeams; t++) {
+        const th = document.createElement('th');
+        th.className = "p-3 border border-purple-200";
+        th.innerText = `Equipo ${t}`;
+        header.appendChild(th);
+      }
+
+      for (let r = 0; r < maxRounds; r++) {
+        const tr = document.createElement('tr');
+        if (r === currentRound - 1) tr.className = "bg-purple-50 font-bold";
+
+        const tdRound = document.createElement('td');
+        tdRound.className = "p-2 border border-purple-100 font-semibold";
+        tdRound.innerText = `Ronda ${r + 1}`;
+        tr.appendChild(tdRound);
+
+        for (let t = 1; t <= numTeams; t++) {
+          const td = document.createElement('td');
+          td.className = "p-2 border border-purple-100";
+          td.innerText = scores[t] ? (scores[t][r] || 0) : 0;
+          tr.appendChild(td);
+        }
+        body.appendChild(tr);
+      }
+
+      for (let t = 1; t <= numTeams; t++) {
+        const tdTotal = document.createElement('td');
+        tdTotal.className = "p-3 border border-pink-200 text-xl font-black";
+        tdTotal.innerText = scores[t] ? scores[t].reduce((a, b) => a + b, 0) : 0;
+        footer.appendChild(tdTotal);
+      }
+    }
+
+    function resetGame() {
+      if (confirm("¿Estás seguro de reiniciar el juego? Se borrarán los puntajes acumulados.")) {
+        clearInterval(timerInterval);
+        moviePool = [...rawMovies].sort(() => Math.random() - 0.5);
+        currentRound = 1;
+        currentTeamTurn = 1;
+        
+        for (let t = 1; t <= numTeams; t++) {
+          scores[t] = Array(maxRounds).fill(0);
+        }
+
+        document.getElementById('selected-movie-text').innerText = "¡Girás la rueda para descubrir la película!";
+        document.getElementById('timer-display').innerText = "45";
+        document.getElementById('spin-btn').disabled = false;
+        document.getElementById('score-buttons').classList.add('hidden');
+
+        updateTurnLabel();
+        drawWheel();
+        alert("El juego ha sido reiniciado.");
+        navigate('config');
+      }
+    }
+  </script>
+</body>
+</html>
