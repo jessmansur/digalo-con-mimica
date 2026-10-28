@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dígalo con Mímica</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- SheetJS para leer Excel/CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap');
+    body {
+      font-family: 'Fredoka', sans-serif;
+      background-color: #fdf4f8;
+    }
+    .bg-lila-soft { background-color: #f3e8ff; }
+    .bg-lila-main { background-color: #d8b4fe; }
+    .bg-lila-dark { background-color: #9333ea; }
+    .text-lila-dark { color: #7e22ce; }
+    .bg-rosa-soft { background-color: #fce7f3; }
+    .bg-rosa-main { background-color: #f472b6; }
+    .border-lila { border-color: #c084fc; }
+  </style>
+</head>
+<body class="flex flex-col md:flex-row min-h-screen text-gray-800">
+
+  <!-- BARRA LATERAL / MENÚ -->
+  <aside class="w-full md:w-64 bg-white border-r border-purple-200 p-6 flex flex-col justify-between shadow-lg">
+    <div>
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-purple-700 tracking-wide">🎬 Dígalo con Mímica</h1>
+        <p class="text-xs text-pink-500 font-semibold mt-1">¡A jugar y adivinar!</p>
+      </div>
+
+      <nav class="space-y-3">
+        <button onclick="navigate('config')" id="nav-config" class="w-full text-left px-4 py-3 rounded-xl font-bold transition flex items-center gap-3 bg-purple-100 text-purple-800 border-2 border-purple-300">
+          ⚙️ Configuración
+        </button>
+        <button onclick="navigate('game')" id="nav-game" class="w-full text-left px-4 py-3 rounded-xl font-bold transition flex items-center gap-3 hover:bg-purple-50 text-gray-600">
+          🎭 ¡Juguemos!
+        </button>
+        <button onclick="navigate('scores')" id="nav-scores" class="w-full text-left px-4 py-3 rounded-xl font-bold transition flex items-center gap-3 hover:bg-purple-50 text-gray-600">
+          🏆 Puntajes
+        </button>
+      </nav>
+    </div>
+
+    <div class="mt-8">
+      <button onclick="resetGame()" class="w-full bg-pink-500 hover:bg-pink-600 text-white font-bold py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+        🔄 Reiniciar juego
+      </button>
+    </div>
+  </aside>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="flex-1 p-4 md:p-8 overflow-y-auto">
+
+    <!-- SECCIÓN: CONFIGURACIÓN -->
+    <section id="sec-config" class="max-w-3xl mx-auto space-y-6">
+      <div class="bg-white p-6 rounded-2xl shadow-md border border-purple-100">
+        <h2 class="text-2xl font-bold text-purple-700 mb-4">📁 Cargar Películas</h2>
+        
+        <!-- Dropzone / Input Excel -->
+        <div id="dropzone" class="border-2 border-dashed border-purple-300 rounded-2xl p-8 text-center bg-purple-50 hover:bg-purple-100/50 transition cursor-pointer relative" onclick="document.getElementById('fileInput').click()">
+          <input type="file" id="fileInput" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleFile(this.files[0])">
+          <div class="space-y-2">
+            <span class="text-4xl">📊</span>
+            <p class="text-lg font-bold text-purple-800">Arrojá acá tu listado de películas</p>
+            <p class="text-sm text-purple-400 font-medium">Debe ser un archivo Excel (.xlsx, .xls) o CSV</p>
+          </div>
+        </div>
+
+        <!-- Estado del archivo cargado -->
+        <div id="file-status" class="mt-4 p-4 bg-pink-50 border border-pink-200 rounded-xl text-pink-700 hidden">
+          <p class="font-bold" id="status-title">✅ Archivo cargado correctamente</p>
+          <p class="text-sm" id="status-desc"></p>
+        </div>
+      </div>
+
+      <!-- Opciones de Equipos y Rondas (Se muestran tras cargar el archivo) -->
+      <div id="setup-options" class="bg-white p-6 rounded-2xl shadow-md border border-purple-100 hidden space-y-6">
+        <h2 class="text-2xl font-bold text-purple-700">👥 Selección de Equipos</h2>
+        <div id="options-container" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Generado dinámicamente -->
+        </div>
+      </div>
+    </section>
+
+    <!-- SECCIÓN: ¡JUGUEMOS! -->
+    <section id="sec-game" class="max-w-4xl mx-auto hidden space-y-6">
+      <div class="bg-white p-6 rounded-2xl shadow-md border border-purple-100 text-center space-y-6">
+        
+        <div class="flex justify-between items-center bg-purple-50 p-4 rounded-xl">
+          <span class="text-lg font-bold text-purple-700" id="current-round-label">Ronda 1</span>
+          <span class="text-lg font-bold text-pink-600" id="turn-label">Turno del Equipo 1</span>
+        </div>
+
+        <!-- RULETA -->
+        <div class="relative flex justify-center items-center py-4">
+          <div class="relative w-72 h-72 md:w-80 md:h-80">
+            <!-- Indicador superior -->
+            <div class="absolute -top-3 left-1/2 -translate-x-1/2 z-20 w-0 h-0 border-l-[15px] border-l-transparent border-r-[15px] border-r-transparent border-t-[25px] border-t-pink-600"></div>
+            <!-- Canvas de la Ruleta -->
+            <canvas id="wheelCanvas" width="320" height="320" class="w-full h-full rounded-full shadow-lg border-4 border-purple-300"></canvas>
+            <!-- Botón Girar en el centro -->
+            <button onclick="spinWheel()" id="spin-btn" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-pink-500 hover:bg-pink-600 text-white font-bold w-20 h-20 rounded-full shadow-xl border-4 border-white text-lg transition transform hover:scale-105 active:scale-95 flex items-center justify-center">
+              Girar
+            </button>
+          </div>
+        </div>
+
+        <!-- RESULTADO DE LA PELÍCULA -->
+        <div id="movie-result" class="min-h-[4rem] flex items-center justify-center p-4 bg-purple-50 rounded-xl border border-purple-200">
+          <p class="text-2xl font-bold text-purple-900" id="selected-movie-text">¡Girás la rueda para descubrir la película!</p>
+        </div>
+
+        <!-- TEMPORIZADOR DE 45 SEGUNDOS -->
+        <div class="flex flex-col items-center justify-center space-y-3 bg-pink-50 p-6 rounded-2xl border border-pink-200">
+          <div class="text-5xl font-black text-pink-600 font-mono tracking-wider" id="timer-display">45</div>
+          <div class="flex gap-4">
+            <button onclick="stopTimer()" id="stop-timer-btn" class="bg-purple-600 hover:bg-purple-700 text-white font-bold px-6 py-2 rounded-xl shadow transition" disabled>
+              Stop timer 🛑
+            </button>
+          </div>
+        </div>
+
+        <!-- BOTONES ASIGNACIÓN DE PUNTO -->
+        <div id="score-buttons" class="hidden space-y-3 pt-4 border-t border-purple-100">
+          <p class="text-lg font-bold text-purple-700">¿Quién sumó el punto?</p>
+          <div id="team-point-btns" class="flex flex-wrap justify-center gap-3">
+            <!-- Botones dinámicos por equipo -->
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- SECCIÓN: PUNTAJES -->
+    <section id="sec-scores" class="max-w-4xl mx-auto hidden space-y-6">
+      <div class="bg-white p-6 rounded-2xl shadow-md border border-purple-100 space-y-4">
+        <h2 class="text-2xl font-bold text-purple-700">🏆 Tabla de Puntajes</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-center border-collapse">
+            <thead>
+              <tr id="table-header" class="bg-purple-100 text-purple-800">
+                <th class="p-3 border border-purple-200">Ronda</th>
+                <!-- Equipos dinámicos -->
+              </tr>
+            </thead>
+            <tbody id="table-body">
+              <!-- Filas dinámicas -->
+            </tbody>
+            <tfoot>
+              <tr id="table-footer" class="bg-pink-100 font-bold text-pink-800">
+                <td class="p-3 border border-pink-200">TOTAL</td>
+                <!-- Totales dinámicos -->
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    // ESTADO DEL JUEGO
+    let rawMovies = [];
+    let moviePool = [];
+    let numTeams = 2;
+    let maxRounds = 10;
+    let currentRound = 1;
+    let currentTeamTurn = 1;
+    let scores = {}; // { 1: [pts_ronda1, pts_ronda2], 2: [...] }
+    
+    let timerInterval = null;
+    let timeLeft = 45;
+    let isSpinning = false;
+    let currentMovie = "";
+
+    // Colores para la ruleta
+    const wheelColors = ['#f472b6', '#c084fc', '#fbcfe8', '#e9d5ff', '#a855f7', '#ec4899'];
+
+    // NAVEGACIÓN
+    function navigate(section) {
+      ['config', 'game', 'scores'].forEach(sec => {
+        document.getElementById(`sec-${sec}`).classList.add('hidden');
+        const btn = document.getElementById(`nav-${sec}`);
+        btn.className = "w-full text-left px-4 py-3 rounded-xl font-bold transition flex items-center gap-3 hover:bg-purple-50 text-gray-600";
+      });
+
+      document.getElementById(`sec-${section}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`nav-${section}`);
+      activeBtn.className = "w-full text-left px-4 py-3 rounded-xl font-bold transition flex items-center gap-3 bg-purple-100 text-purple-800 border-2 border-purple-300";
+
+      if (section === 'game') drawWheel();
+      if (section === 'scores') updateScoreTable();
+    }
+
+    // MANEJO DE ARCHIVOS EXCEL / CSV
+    function handleFile(file) {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+        
+        // Aplanar y limpiar lista de películas
+        rawMovies = jsonData.flat()
+          .map(item => item ? item.toString().trim() : '')
+          .filter(item => item.length > 0);
+
+        if (rawMovies.length < 2) {
+          alert("El archivo debe contener al menos 2 películas.");
+          return;
+        }
+
+        // Mostrar estado
+        document.getElementById('file-status').classList.remove('hidden');
+        document.getElementById('status-desc').innerText = `Se cargaron ${rawMovies.length} películas del archivo "${file.name}".`;
+
+        calculateOptions(rawMovies.length);
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // CÁLCULO DE EQUIPOS Y RONDAS
+    function calculateOptions(total) {
+      const container = document.getElementById('options-container');
+      container.innerHTML = '';
+
+      for (let teams = 2; teams <= 4; teams++) {
+        const rounds = Math.floor(total / teams);
+        const leftover = total % teams;
+
+        if (rounds < 1) continue;
+
+        const card = document.createElement('div');
+        card.className = "p-4 rounded-xl border-2 border-purple-200 bg-purple-50 text-center hover:border-purple-500 transition space-y-2 flex flex-col justify-between";
+        card.innerHTML = `
+          <div>
+            <h3 class="font-bold text-lg text-purple-800">${teams} Equipos</h3>
+            <p class="text-sm text-gray-600">${rounds} rondas por equipo</p>
+            ${leftover > 0 ? `<p class="text-xs text-pink-500 mt-1">Sobran ${leftover} película(s) aleatoria(s)</p>` : `<p class="text-xs text-green-600 mt-1">¡Encaje perfecto!</p>`}
+          </div>
+          <button onclick="setupGame(${teams}, ${rounds})" class="w-full mt-3 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg shadow">
+            Elegir esta opción
+          </button>
+        `;
+        container.appendChild(card);
+      }
+
+      document.getElementById('setup-options').classList.remove('hidden');
+    }
+
+    // CONFIGURAR Y EMPEZAR JUEGO
+    function setupGame(teams, rounds) {
+      numTeams = teams;
+      maxRounds = rounds;
+      moviePool = [...rawMovies].sort(() => Math.random() - 0.5);
+      
+      // Inicializar puntajes
+      scores = {};
+      for (let t = 1; t <= numTeams; t++) {
+        scores[t] = Array(maxRounds).fill(0);
+      }
+
+      currentRound = 1;
+      currentTeamTurn = 1;
+
+      updateTurnLabel();
+      setupPointButtons();
+      drawWheel();
+
+      alert(`¡Juego configurado para ${numTeams} equipos y ${maxRounds} rondas!`);
+      navigate('game');
+    }
+
+    // DIBUJAR RULETA EN CANVAS
+    function drawWheel(angle = 0) {
+      const canvas = document.getElementById('wheelCanvas');
+      const ctx = canvas.getContext('2d');
+      const cx = canvas.width / 2;
+      const cy = canvas.height / 2;
+      const radius = canvas.width / 2 - 10;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      const slices = Math.max(moviePool.length, 1);
+      const sliceAngle = (2 * Math.PI) / slices;
+
+      for (let i = 0; i < slices; i++) {
+        const start = angle + i * sliceAngle;
+        const end = start + sliceAngle;
+
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, radius, start, end);
+        ctx.fillStyle = wheelColors[i % wheelColors.length];
+        ctx.fill();
+        ctx.stroke();
+
+        // Texto
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(start + sliceAngle / 2);
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 12px Fredoka, sans-serif";
+        let text = moviePool[i] || "Sin películas";
+        if (text.length > 15) text = text.substring(0, 13) + "..";
+        ctx.fillText(text, radius - 15, 5);
+        ctx.restore();
+      }
+    }
+
+    // GIRO DE LA RULETA
+    function spinWheel() {
+      if (isSpinning) return;
+      if (moviePool.length === 0) {
+        alert("¡Se acabaron las películas del pool!");
+        return;
+      }
+
+      isSpinning = true;
+      document.getElementById('spin-btn').disabled = true;
+      document.getElementById('selected-movie-text').innerText = "Girando...";
+
+      let duration = 3000;
+      let start = null;
+      let totalRotation = Math.PI * 2 * (5 + Math.random() * 5);
+
+      function animate(timestamp) {
+        if (!start) start = timestamp;
+        let progress = (timestamp - start) / duration;
+
+        if (progress < 1) {
+          let easeOut = 1 - Math.pow(1 - progress, 3);
+          let currentAngle = easeOut * totalRotation;
+          drawWheel(currentAngle);
+          requestAnimationFrame(animate);
+        } else {
+          isSpinning = false;
+          // Seleccionar película ganadora
+          const selectedIndex = Math.floor(Math.random() * moviePool.length);
+          currentMovie = moviePool.splice(selectedIndex, 1)[0];
+
+          document.getElementById('selected-movie-text').innerText = `🎬 Película: "${currentMovie}"`;
+          drawWheel();
+          startTimer();
+        }
+      }
+
+      requestAnimationFrame(animate);
+    }
+
+    // TEMPORIZADOR
+    function startTimer() {
+      clearInterval(timerInterval);
+      timeLeft = 45;
+      document.getElementById('timer-display').innerText = timeLeft;
+      document.getElementById('stop-timer-btn').disabled = false;
+      document.getElementById('score-buttons').classList.add('hidden');
+
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        document.getElementById('timer-display').innerText = timeLeft;
+        if (timeLeft <= 0) {
+          stopTimer();
+        }
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      document.getElementById('stop-timer-btn').disabled = true;
+      document.getElementById('score-buttons').classList.remove('hidden');
+    }
+
+    // ASIGNACIÓN DE PUNTO Y AVANCE DE TURNO
+    function awardPoint(teamNumber) {
+      if (teamNumber !== null) {
+        scores[teamNumber][currentRound - 1] += 1;
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
+      }
+
+      // Avanzar turno
+      currentTeamTurn++;
+      if (currentTeamTurn > numTeams) {
+        currentTeamTurn = 1;
+        currentRound++;
+      }
+
+      if (currentRound > maxRounds) {
+        alert("🎉 ¡El juego ha terminado! Vamos a ver los puntajes.");
+        navigate('scores');
+        return;
+      }
+
+      updateTurnLabel();
+      document.getElementById('score-buttons').classList.add('hidden');
+      document.getElementById('selected-movie-text').innerText = "¡Girás la rueda para la siguiente película!";
+      document.getElementById('spin-btn').disabled = false;
+    }
+
+    function updateTurnLabel() {
+      document.getElementById('current-round-label').innerText = `Ronda ${currentRound} de ${maxRounds}`;
+      document.getElementById('turn-label').innerText = `Turno del Equipo ${currentTeamTurn}`;
+    }
+
+    function setupPointButtons() {
+      const container = document.getElementById('team-point-btns');
+      container.innerHTML = '';
+
+      for (let t = 1; t <= numTeams; t++) {
+        const btn = document.createElement('button');
+        btn.className = "bg-pink-500 hover:bg-pink-600 text-white font-bold py-2 px-4 rounded-xl shadow transition";
+        btn.innerText = `Punto para Equipo ${t}`;
+        btn.onclick = () => awardPoint(t);
+        container.appendChild(btn);
+      }
+
+      const noPointBtn = document.createElement('button');
+      noPointBtn.className = "bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-xl shadow transition";
+      noPointBtn.innerText = "Nadie sumó punto ❌";
+      noPointBtn.onclick = () => awardPoint(null);
+      container.appendChild(noPointBtn);
+    }
+
+    // TABLA DE PUNTAJES
+    function updateScoreTable() {
+      const header = document.getElementById('table-header');
+      const body = document.getElementById('table-body');
+      const footer = document.getElementById('table-footer');
+
+      // Limpiar
+      header.innerHTML = '<th class="p-3 border border-purple-200">Ronda</th>';
+      body.innerHTML = '';
+      footer.innerHTML = '<td class="p-3 border border-pink-200">TOTAL</td>';
+
+      // Encabezados
+      for (let t = 1; t <= numTeams; t++) {
+        const th = document.createElement('th');
+        th.className = "p-3 border border-purple-200";
+        th.innerText = `Equipo ${t}`;
+        header.appendChild(th);
+      }
+
+      // Filas por ronda
+      for (let r = 0; r < maxRounds; r++) {
+        const tr = document.createElement('tr');
+        if (r === currentRound - 1) tr.className = "bg-purple-50 font-bold";
+
+        const tdRound = document.createElement('td');
+        tdRound.className = "p-2 border border-purple-100 font-semibold";
+        tdRound.innerText = `Ronda ${r + 1}`;
+        tr.appendChild(tdRound);
+
+        for (let t = 1; t <= numTeams; t++) {
+          const td = document.createElement('td');
+          td.className = "p-2 border border-purple-100";
+          td.innerText = scores[t] ? (scores[t][r] || 0) : 0;
+          tr.appendChild(td);
+        }
+        body.appendChild(tr);
+      }
+
+      // Totales
+      for (let t = 1; t <= numTeams; t++) {
+        const td = document.createElement('td');
+        td.className = "p-3 border border-pink-200 text-xl font-black";
+        const total = scores[t] ? scores[t].reduce((a, b) => a + b, 0) : 0;
+        td.innerText = total;
+        footer.appendChild(td);
+      }
+    }
+
+    // REINICIAR JUEGO
+    function resetGame() {
+      if (confirm("¿Estás seguro de reiniciar el juego? Se borrarán los puntajes acumulados.")) {
+        clearInterval(timerInterval);
+        moviePool = [...rawMovies].sort(() => Math.random() - 0.5);
+        currentRound = 1;
+        currentTeamTurn = 1;
+        
+        for (let t = 1; t <= numTeams; t++) {
+          scores[t] = Array(maxRounds).fill(0);
+        }
+
+        document.getElementById('selected-movie-text').innerText = "¡Girás la rueda para descubrir la película!";
+        document.getElementById('timer-display').innerText = "45";
+        document.getElementById('spin-btn').disabled = false;
+        document.getElementById('score-buttons').classList.add('hidden');
+
+        updateTurnLabel();
+        drawWheel();
+        alert("El juego ha sido reiniciado.");
+        navigate('config');
+      }
+    }
+  </script>
+</body>
+</html>
