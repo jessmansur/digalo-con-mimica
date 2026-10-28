@@ -53,7 +53,7 @@
 
     <!-- SECCIÓN: CONFIGURACIÓN -->
     <section id="sec-config" class="max-w-3xl mx-auto space-y-6">
-      <div class="bg-white p-6 rounded-2xl shadow-md border border-purple-100 space-y-4">
+      <div class="bg-white p-6 rounded-2xl shadow-md border border-purple-100 space-y-6">
         <h2 class="text-2xl font-bold text-purple-700">📁 Cargar Películas</h2>
         
         <!-- Dropzone / Input Excel -->
@@ -66,15 +66,15 @@
           </div>
         </div>
 
-        <div class="relative flex py-1 items-center">
+        <div class="relative flex items-center">
           <div class="flex-grow border-t border-purple-200"></div>
           <span class="flex-shrink mx-4 text-purple-400 text-xs font-bold">O INGRESALAS MANUALMENTE</span>
           <div class="flex-grow border-t border-purple-200"></div>
         </div>
 
-        <!-- Opción alternativa con punto y coma -->
-        <div class="space-y-2">
-          <textarea id="manualMovies" rows="3" class="w-full p-3 border border-purple-200 rounded-xl focus:outline-none focus:border-purple-500 text-sm" placeholder="Ej: Volver al futuro; Titanic; Shrek; Toy Story"></textarea>
+        <!-- Opción manual con punto y coma -->
+        <div class="space-y-3">
+          <textarea id="manualMovies" rows="3" class="w-full p-3 border border-purple-200 rounded-xl focus:outline-none focus:border-purple-500 text-sm" placeholder="Ej: Volver al futuro; Shrek; Toy Story"></textarea>
           <p class="text-xs text-purple-400">Las películas deben ser separadas por punto y coma (;) así se podrá identificar y diferenciar los títulos.</p>
           <button onclick="handleManualText()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2.5 px-4 rounded-xl shadow transition">
             Ingresar películas
@@ -82,9 +82,9 @@
         </div>
 
         <!-- Estado del archivo o texto cargado -->
-        <div id="file-status" class="mt-2 p-3 bg-pink-50 border border-pink-200 rounded-xl text-pink-700 hidden">
-          <p class="font-bold text-sm" id="status-title">✅ Listado cargado correctamente</p>
-          <p class="text-xs" id="status-desc"></p>
+        <div id="file-status" class="p-4 bg-pink-50 border border-pink-200 rounded-xl text-pink-700 hidden">
+          <p class="font-bold" id="status-title">✅ Listado cargado correctamente</p>
+          <p class="text-sm" id="status-desc"></p>
         </div>
       </div>
 
@@ -191,7 +191,6 @@
 
     // Colores para la ruleta
     const wheelColors = ['#f472b6', '#c084fc', '#fbcfe8', '#e9d5ff', '#a855f7', '#ec4899'];
-    // Emojis para que la ruleta se vea divertida sin mostrar los nombres de las películas
     const wheelEmojis = ['🎬', '🍿', '⭐', '🎭', '🎟️', '✨', '🎥', '🏆', '🎉', '💖', '🎁', '🎪'];
 
     // NAVEGACIÓN
@@ -210,8 +209,9 @@
       if (section === 'scores') updateScoreTable();
     }
 
-    function processMoviesList(moviesArray) {
-      rawMovies = moviesArray
+    // PROCESADOR CENTRAL DE LISTAS
+    function processMovies(list) {
+      rawMovies = list
         .map(item => item ? item.toString().trim() : '')
         .filter(item => item.length > 0);
 
@@ -235,12 +235,12 @@
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
-        processMoviesList(jsonData.flat());
+        processMovies(jsonData.flat());
       };
       reader.readAsArrayBuffer(file);
     }
 
-    // MANEJO DE TEXTO MANUAL SEPARADO POR PUNTO Y COMA
+    // MANEJO DE TEXTO MANUAL (SEPARADO POR PUNTO Y COMA)
     function handleManualText() {
       const text = document.getElementById('manualMovies').value;
       if (!text.trim()) {
@@ -248,7 +248,7 @@
         return;
       }
       const moviesArray = text.split(';');
-      processMoviesList(moviesArray);
+      processMovies(moviesArray);
     }
 
     // CÁLCULO DE EQUIPOS Y RONDAS
@@ -286,7 +286,6 @@
       maxRounds = rounds;
       moviePool = [...rawMovies].sort(() => Math.random() - 0.5);
       
-      // Inicializar puntajes
       scores = {};
       for (let t = 1; t <= numTeams; t++) {
         scores[t] = Array(maxRounds).fill(0);
@@ -303,9 +302,10 @@
       navigate('game');
     }
 
-    // DIBUJAR RULETA EN CANVAS (Emojis decorativos sin mostrar títulos)
+    // DIBUJAR RULETA EN CANVAS (Emojis decorativos sin nombres)
     function drawWheel(angle = 0) {
       const canvas = document.getElementById('wheelCanvas');
+      if (!canvas) return;
       const ctx = canvas.getContext('2d');
       const cx = canvas.width / 2;
       const cy = canvas.height / 2;
@@ -327,7 +327,6 @@
         ctx.fill();
         ctx.stroke();
 
-        // Se dibujan emojis decorativos en las porciones
         ctx.save();
         ctx.translate(cx, cy);
         ctx.rotate(start + sliceAngle / 2);
@@ -365,7 +364,6 @@
           requestAnimationFrame(animate);
         } else {
           isSpinning = false;
-          // Seleccionar película ganadora
           const selectedIndex = Math.floor(Math.random() * moviePool.length);
           currentMovie = moviePool.splice(selectedIndex, 1)[0];
 
@@ -408,7 +406,6 @@
         confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 } });
       }
 
-      // Avanzar turno
       currentTeamTurn++;
       if (currentTeamTurn > numTeams) {
         currentTeamTurn = 1;
@@ -457,12 +454,10 @@
       const body = document.getElementById('table-body');
       const footer = document.getElementById('table-footer');
 
-      // Limpiar
       header.innerHTML = '<th class="p-3 border border-purple-200">Ronda</th>';
       body.innerHTML = '';
       footer.innerHTML = '<td class="p-3 border border-pink-200">TOTAL</td>';
 
-      // Encabezados
       for (let t = 1; t <= numTeams; t++) {
         const th = document.createElement('th');
         th.className = "p-3 border border-purple-200";
@@ -470,7 +465,6 @@
         header.appendChild(th);
       }
 
-      // Filas por ronda
       for (let r = 0; r < maxRounds; r++) {
         const tr = document.createElement('tr');
         if (r === currentRound - 1) tr.className = "bg-purple-50 font-bold";
@@ -489,7 +483,6 @@
         body.appendChild(tr);
       }
 
-      // Totales
       for (let t = 1; t <= numTeams; t++) {
         const td = document.createElement('td');
         td.className = "p-3 border border-pink-200 text-xl font-black";
